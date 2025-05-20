@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Alzheimer’s Predictor</title>
+
+<!--  ──────────  Styles  ──────────  -->
+<style>
+  /* ---------- Global ---------- */
+  html,body{height:100%;margin:0;font-family:Arial,Helvetica,sans-serif}
+  body{
+      display:flex;                 /* stack top-bar, then page */
+      flex-direction:column;
+      align-items:center;
+      background:#fafafa;
+      padding-top:72px;             /* 64-px bar + 8-px gap */
+      box-sizing:border-box;
+  }
+
+  /* ---------- Top Bar ---------- */
+  #topBar{
+    position:fixed;top:0;left:0;right:0;height:64px;padding:0 32px;
+    background:#1d1d1d;color:#fff;display:flex;align-items:center;
+    box-shadow:0 2px 6px rgba(0,0,0,.25);z-index:1100
+  }
+  #topBar h1{margin:0;font-size:20px;font-weight:600;letter-spacing:.5px}
+
+  /* ---------- Layout ---------- */
+  #wrapper{display:flex;gap:32px;align-items:flex-start}
+
+  /* ---------- Form panel ---------- */
+  #formBox{
+    width:600px;min-height:450px;border:6px solid #777;border-radius:24px;
+    background:#fff;padding:32px;box-shadow:0 4px 10px rgba(0,0,0,.08);
+    display:flex;flex-direction:column;gap:18px
+  }
+  #formBox label{font-weight:600;margin-bottom:4px}
+  #formBox input,#formBox select{
+    width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font-size:15px
+  }
+  #predictBtn{
+    padding:12px 22px;font-size:16px;border:none;border-radius:6px;
+    background:#222;color:#fff;cursor:pointer;margin-top:6px
+  }
+
+  /* ---------- Instruction panel ---------- */
+  #textPanel{
+    width:320px;min-height:450px;border:2px solid #bbb;border-radius:16px;
+    background:#fff;padding:24px;box-shadow:0 4px 10px rgba(0,0,0,.05);
+    display:flex;flex-direction:column;gap:16px
+  }
+  #textPanel h2{margin:0 0 8px}
+  #textPanel p{margin:0;line-height:1.45;color:#444}
+
+  /* ---------- Slide-out sidebar ---------- */
+  #sidebar{
+    position:fixed;top:0;right:0;width:380px;height:100%;background:#fff;
+    transform:translateX(100%);transition:transform .45s ease;
+    box-shadow:0 0 18px rgba(0,0,0,.15);z-index:1001;padding:32px 24px;
+    display:flex;flex-direction:column;gap:18px
+  }
+  #sidebar.open{transform:translateX(0)}
+  #sidebar h2{margin:0}
+  #results{font-size:16px;color:#333;line-height:1.5}
+  #closeSidebar{
+    align-self:flex-start;margin-top:auto;padding:8px 16px;border:none;
+    background:#777;color:#fff;border-radius:6px;cursor:pointer
+  }
+
+  /* ---------- Overlay ---------- */
+  #overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:1000
+  }
+  #overlay.show{display:block}
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<header id="topBar"><h1>Alzheimer’s Predictor</h1></header>
+
+<!-- Overlay -->
+<div id="overlay"></div>
+
+<!-- Slide-out sidebar -->
+<div id="sidebar">
+  <h2>Result</h2>
+  <div id="results">Predicting…</div>
+  <button id="closeSidebar">Close</button>
+</div>
+
+<!-- Main content -->
+<div id="wrapper">
+
+  <!-- Form for patient inputs -->
+  <div id="formBox">
+    <label>Age</label><input type="number" id="age" min="50" max="100" value="75">
+    <label>Gender</label>
+      <select id="gender"><option>Female</option><option>Male</option></select>
+    <label>Years of Education</label><input type="number" id="educ" min="0" max="25" value="12">
+    <label>MMSE Score</label><input type="number" id="mmse" min="0" max="30" value="27">
+    <label>SES (1–5)</label><input type="number" id="ses" min="1" max="5" value="3">
+    <label>Normalised Whole-Brain Volume (nWBV)</label>
+      <input type="number" step="0.01" id="nwbv" value="0.75">
+    <label>Atlas Scaling Factor (ASF)</label>
+      <input type="number" step="0.01" id="asf" value="1.10">
+    <button id="predictBtn">Predict</button>
+  </div>
+
+  <!-- Instruction panel -->
+  <div id="textPanel">
+    <h2>Instructions</h2>
+    <p>Enter the patient’s demographic and MRI-derived metrics, then press
+       <em>Predict</em>. The model returns “Alzheimer’s” or “Control” with a
+       confidence score.</p>
+    <p>For batch predictions, use the CSV upload feature provided in the full app.</p>
+  </div>
+
+</div>
+
+<!--  ──────────  Scripts  ──────────  -->
+<script>
+/* Element references */
+const btn   = document.getElementById('predictBtn');
+const side  = document.getElementById('sidebar');
+const res   = document.getElementById('results');
+const ov    = document.getElementById('overlay');
+const close = document.getElementById('closeSidebar');
+
+/* Helpers */
+const openSide = () => { side.classList.add('open'); ov.classList.add('show'); };
+const closeSide= () => { side.classList.remove('open'); ov.classList.remove('show'); };
+
+/* Predict handler */
+btn.addEventListener('click', async () => {
+  const payload = {
+    Age:   +document.getElementById('age').value,
+    Gender:+(document.getElementById('gender').value === 'Male'),
+    Educ:  +document.getElementById('educ').value,
+    MMSE:  +document.getElementById('mmse').value,
+    SES:   +document.getElementById('ses').value,
+    nWBV:  +document.getElementById('nwbv').value,
+    ASF:   +document.getElementById('asf').value
+  };
+  res.textContent = 'Predicting…';
+  openSide();
+
+  try{
+    const r = await fetch('/predict',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if(!r.ok) throw new Error(r.statusText);
+    const json = await r.json();
+    res.innerHTML = `<strong>${json.label}</strong><br>
+                     Confidence: ${(json.prob*100).toFixed(1)}%`;
+  }catch(e){
+    console.error(e);
+    res.textContent = 'Error running prediction.';
+  }
+});
+
+/* Close sidebar */
+close.addEventListener('click', closeSide);
+ov.addEventListener('click', closeSide);
+</script>
+</body>
+</html>
