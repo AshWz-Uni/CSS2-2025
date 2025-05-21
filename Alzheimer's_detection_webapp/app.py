@@ -52,7 +52,7 @@ def predict():
         prob = MODEL.predict_proba(df)[0][pred]
 
         result = {
-            "label": "Has Alzheimer’s Disease" if pred == 1 else "Control / No AD",
+            "label": "Alzheimer’s" if pred == 1 else "Control / No AD",
             "prob":  float(prob)
         }
         return jsonify(result)
